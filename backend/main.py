@@ -22,6 +22,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {
+        "message": "GeoRoad AI Backend API is Running",
+        "docs": "http://127.0.0.1:8000/docs",
+        "all_complaints_api": "http://127.0.0.1:8000/api/admin/complaints"
+    }
+
 if os.getenv("VERCEL"):
     UPLOAD_DIR = Path("/tmp/uploads")
 else:
