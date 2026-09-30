@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Camera, MapPin, UploadCloud, CheckCircle, User, Phone, Home as HomeIcon, FileText, Loader2 } from 'lucide-react';
 
-const API = 'http://localhost:8000/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 
 export default function CitizenPortal() {
   const nav = useNavigate();

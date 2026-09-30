@@ -2,7 +2,11 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.orm import declarative_base, sessionmaker
 import datetime, os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "road_damage.db")
+if os.getenv("VERCEL"):
+    DB_PATH = "/tmp/road_damage.db"
+else:
+    DB_PATH = os.path.join(os.path.dirname(__file__), "road_damage.db")
+
 engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()

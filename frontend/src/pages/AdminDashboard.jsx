@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Clock, CheckCircle2, XCircle, MapPin, User, Phone, Mail, FileText, Image, Activity, LogOut, Loader2, X, ArrowRight } from 'lucide-react';
 
-const API = 'http://localhost:8000/api';
-const BACKEND = 'http://localhost:8000';
+const API = import.meta.env.VITE_API_URL || '/api';
+const BACKEND = import.meta.env.VITE_BACKEND_URL || '';
 
 export default function AdminDashboard() {
   const nav = useNavigate();

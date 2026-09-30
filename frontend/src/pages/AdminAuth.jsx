@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, Mail, Loader2, X, ArrowRight } from 'lucide-react';
 
-const API = 'http://localhost:8000/api';
+const API = import.meta.env.VITE_API_URL || '/api';
 
 export default function AdminAuth() {
   const nav = useNavigate();
