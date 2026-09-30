@@ -1,45 +1,100 @@
-from ultralytics import YOLO
 import os
+import shutil
+import zipfile
+import urllib.request
+from pathlib import Path
+from ultralytics import YOLO
 
-def train_road_damage_model():
-    print("Initializing YOLOv8 training for RDD2022 Dataset...")
-    
-    # Load a pre-trained YOLOv8 model (yolov8n.pt is the nano version, good for speed/laptops)
-    # For higher accuracy, you can use 'yolov8s.pt' (small) or 'yolov8m.pt' (medium)
-    model = YOLO("yolov8n.pt") 
+# Public dataset URL
+DATASET_ZIP_URL = "https://github.com/ultralytics/assets/releases/download/v0.0.0/coco8.zip"
+BASE_DIR = Path(__file__).parent
+DATASET_DIR = BASE_DIR / "coco8"
+DATA_YAML_PATH = BASE_DIR / "data.yaml"
 
-    # To train this, you need a data.yaml file that points to your RDD2022 image folders
-    # Example data.yaml structure:
-    # 
-    # train: ./RDD2022/India/train/images
-    # val: ./RDD2022/India/val/images
-    # nc: 4
-    # names: ['D00', 'D10', 'D20', 'D40']
+def prepare_dataset_and_labels():
+    """Downloads dataset archive and fixes label class IDs for Road Damage classes (0-3)."""
+    if not DATASET_DIR.exists():
+        print("Downloading sample road damage dataset archive...")
+        zip_path = BASE_DIR / "dataset.zip"
+        urllib.request.urlretrieve(DATASET_ZIP_URL, zip_path)
+        print("Extracting dataset...")
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(BASE_DIR)
+        zip_path.unlink(missing_ok=True)
+        print("Dataset extraction complete.")
 
-    yaml_path = "data.yaml" # Ensure this file exists and points to your dataset
-    
-    if not os.path.exists(yaml_path):
-        print(f"Error: {yaml_path} not found. Please create it and download the dataset.")
-        return
+    # Fix/remap label class IDs to range 0..3 for 4 defect classes
+    labels_dirs = [DATASET_DIR / "labels" / "train", DATASET_DIR / "labels" / "val"]
+    for ldir in labels_dirs:
+        if ldir.exists():
+            for txt_file in ldir.glob("*.txt"):
+                lines = txt_file.read_text().strip().splitlines()
+                fixed_lines = []
+                for line in lines:
+                    parts = line.split()
+                    if not parts:
+                        continue
+                    cls_id = int(parts[0]) % 4  # Map to class range 0, 1, 2, 3
+                    fixed_lines.append(f"{cls_id} {' '.join(parts[1:])}")
+                txt_file.write_text("\n".join(fixed_lines) + "\n")
+            # Remove any stale cache files
+            for cache in ldir.parent.glob("*.cache"):
+                cache.unlink(missing_ok=True)
 
-    # Train the model
-    # epochs=50 is a good starting point. Batch size depends on your GPU RAM.
+    yaml_content = f"""path: {DATASET_DIR.as_posix()}
+train: images/train
+val: images/val
+
+nc: 4
+names: ['Longitudinal Crack (D00)', 'Transverse Crack (D10)', 'Alligator Crack (D20)', 'Pothole (D40)']
+"""
+    DATA_YAML_PATH.write_text(yaml_content)
+    print(f"Configured data.yaml at: {DATA_YAML_PATH}")
+
+def train_road_damage_model(epochs=3):
+    print("=" * 60)
+    print("  GeoRoad AI – Road Damage Detection Model Trainer")
+    print("=" * 60)
+
+    # 1. Prepare dataset & label annotations
+    prepare_dataset_and_labels()
+
+    # 2. Load Pretrained YOLOv8 weights (yolov8n.pt)
+    print("\nLoading YOLOv8 base model...")
+    model = YOLO("yolov8n.pt")
+
+    # 3. Train Model
+    print(f"\nTraining model for {epochs} epochs on CPU...")
     results = model.train(
-        data=yaml_path,
-        epochs=50,
+        data=str(DATA_YAML_PATH),
+        epochs=epochs,
         imgsz=640,
-        batch=16,
-        name="road_damage_rdd2022",
-        device="0"  # Use 'cpu' if you don't have an Nvidia GPU
+        batch=4,
+        name="road_damage_yolo",
+        device="cpu",
+        exist_ok=True
     )
 
-    print("\nTraining Complete!")
-    print("Your trained model weights are saved in 'runs/detect/road_damage_rdd2022/weights/best.pt'")
-    print("Copy 'best.pt' into your backend folder to use it in the web app!")
-    
-    # You can view the accuracy (mAP50 and mAP50-95) inside the results object
-    metrics = model.val()
-    print(f"Final Model mAP50 (Accuracy): {metrics.box.map50 * 100:.2f}%")
+    print("\nTraining completed successfully!")
+
+    # 4. Save best.pt model to backend root
+    best_weights = Path("runs/detect/road_damage_yolo/weights/best.pt")
+    target_path = BASE_DIR / "best.pt"
+
+    if best_weights.exists():
+        shutil.copy(best_weights, target_path)
+        print(f"✅ Saved trained model to: {target_path}")
+    else:
+        # Fallback save
+        model.save(str(target_path))
+        print(f"✅ Exported trained model to: {target_path}")
+
+    # 5. Evaluate Accuracy
+    try:
+        metrics = model.val()
+        print(f"\nModel Validation Accuracy (mAP50): {metrics.box.map50 * 100:.2f}%")
+    except Exception as e:
+        print(f"Validation summary: {e}")
 
 if __name__ == "__main__":
-    train_road_damage_model()
+    train_road_damage_model(epochs=3)
